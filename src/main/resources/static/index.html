@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>MCP File Editor</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            padding: 20px;
+            background: #f5f5f5;
+        }
+
+        h2 {
+            margin-top: 0;
+        }
+
+        #tree {
+            white-space: pre;
+            font-family: monospace;
+            background: #fff;
+            padding: 10px;
+            border: 1px solid #ddd;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        #editor {
+            margin-top: 20px;
+        }
+
+        textarea {
+            width: 100%;
+            height: 200px;
+            font-family: monospace;
+            padding: 10px;
+        }
+
+        .button-group {
+            margin-top: 10px;
+        }
+
+        .button-group button {
+            margin-right: 10px;
+        }
+
+        .file {
+            cursor: pointer;
+        }
+
+        .file:hover {
+            text-decoration: underline;
+            color: blue;
+        }
+
+        #loader {
+            display: none;
+            margin: 10px 0;
+            font-style: italic;
+            color: #555;
+        }
+    </style>
+</head>
+<body>
+
+<h2>📁 MCP File Editor</h2>
+
+<input type="file" id="folderInput" webkitdirectory multiple />
+<button onclick="createNewFile()">+ Create New File</button>
+<div id="loader">⏳ Processing...</div>
+<div id="tree"></div>
+
+<div id="editor" style="display:none;">
+    <h3>Editing: <span id="currentFile"></span></h3>
+    <textarea id="fileContent"></textarea>
+    <br>
+    <input type="text" id="prompt" placeholder="Describe edit to append (e.g. Add footer comment)" style="width:100%; margin-top:10px;">
+    <div class="button-group">
+        <button onclick="applyEdit()">Apply Edit</button>
+        <button onclick="deleteFile()">Delete File</button>
+    </div>
+</div>
+
+<script>
+    let fileMap = {};
+    let currentFileKey = null;
+
+    function showLoader(show) {
+        document.getElementById('loader').style.display = show ? 'block' : 'none';
+    }
+
+    document.getElementById('folderInput').addEventListener('change', function (event) {
+        const files = Array.from(event.target.files);
+        fileMap = {};
+        const tree = {};
+
+        showLoader(true);
+
+        files.forEach(file => {
+            fileMap[file.webkitRelativePath] = file;
+            const parts = file.webkitRelativePath.split('/');
+            let pointer = tree;
+            parts.forEach((part, i) => {
+                if (i === parts.length - 1) {
+                    pointer[part] = file.webkitRelativePath;
+                } else {
+                    pointer[part] = pointer[part] || {};
+                    pointer = pointer[part];
+                }
+            });
+        });
+
+        document.getElementById('tree').innerHTML = buildTreeHTML(tree, '');
+        showLoader(false);
+    });
+
+    function buildTreeHTML(tree, prefix) {
+        let html = '';
+        for (let key in tree) {
+            if (typeof tree[key] === 'string') {
+                html += prefix + '📄 <span class="file" onclick="openFile(\'' + tree[key] + '\')">' + key + '</span>\n';
+            } else {
+                html += prefix + '📁 ' + key + '\n';
+                html += buildTreeHTML(tree[key], prefix + '  ');
+            }
+        }
+        return html;
+    }
+
+    function openFile(path) {
+        const file = fileMap[path];
+        currentFileKey = path;
+        document.getElementById('currentFile').innerText = path;
+        document.getElementById('editor').style.display = 'block';
+
+        const reader = new FileReader();
+        reader.onload = () => {
+            document.getElementById('fileContent').value = reader.result;
+        };
+        reader.readAsText(file);
+    }
+
+    function applyEdit() {
+        const prompt = document.getElementById('prompt').value.trim();
+        const contentBox = document.getElementById('fileContent');
+        if (!prompt) return;
+
+        showLoader(true);
+        setTimeout(() => {
+            const appendedContent = contentBox.value + "\n\n// Edit note: " + prompt;
+            contentBox.value = appendedContent;
+            showLoader(false);
+        }, 300);
+    }
+
+    function deleteFile() {
+        if (currentFileKey && fileMap[currentFileKey]) {
+            showLoader(true);
+            setTimeout(() => {
+                delete fileMap[currentFileKey];
+                document.getElementById('editor').style.display = 'none';
+                document.getElementById('tree').innerHTML = buildTreeHTMLFromFiles(fileMap);
+                showLoader(false);
+            }, 300);
+        }
+    }
+
+    function createNewFile() {
+        const folderName = prompt("Enter folder name (leave blank to create in root):");
+        const fileName = prompt("Enter file name (e.g. sehaj.txt):");
+
+        if (!fileName || fileName.trim() === '') return;
+
+        let filePath = fileName;
+        if (folderName && folderName.trim() !== '') {
+            filePath = folderName + '/' + fileName;
+        }
+
+        if (fileMap[filePath]) return;
+
+        showLoader(true);
+        setTimeout(() => {
+            const blob = new Blob([""], { type: 'text/plain' });
+            const file = new File([blob], filePath, { type: 'text/plain' });
+
+            fileMap[filePath] = file;
+            document.getElementById('tree').innerHTML = buildTreeHTMLFromFiles(fileMap);
+
+            document.getElementById('editor').style.display = 'block';
+            document.getElementById('currentFile').innerText = filePath;
+            document.getElementById('fileContent').value = "";
+            currentFileKey = filePath;
+
+            showLoader(false);
+        }, 300);
+    }
+
+    function buildTreeHTMLFromFiles(fileMap) {
+        const tree = {};
+        for (let path in fileMap) {
+            const parts = path.split('/');
+            let pointer = tree;
+            parts.forEach((part, i) => {
+                if (i === parts.length - 1) {
+                    pointer[part] = path;
+                } else {
+                    pointer[part] = pointer[part] || {};
+                    pointer = pointer[part];
+                }
+            });
+        }
+        return buildTreeHTML(tree, '');
+    }
+</script>
+
+</body>
+</html>
